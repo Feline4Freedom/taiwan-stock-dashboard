@@ -93,7 +93,14 @@
   .sector-block{
     background:var(--bg2);border:1px solid var(--line);border-radius:10px;
     padding:14px;margin-bottom:14px;
+    scroll-margin-top:8px;
   }
+  @keyframes sectorFlash{
+    0%{box-shadow:0 0 0 0 rgba(96,165,250,.7); border-color:var(--accent)}
+    50%{box-shadow:0 0 0 8px rgba(96,165,250,.15); border-color:var(--accent)}
+    100%{box-shadow:0 0 0 0 rgba(96,165,250,0); border-color:var(--line)}
+  }
+  .sector-block.flash{animation:sectorFlash 1.4s ease-out}
   .sector-block h2{
     font-size:14px;display:flex;align-items:center;gap:8px;margin-bottom:10px;
     padding-bottom:8px;border-bottom:1px solid var(--line);
@@ -407,9 +414,37 @@ function renderSectorList(){
     const it = document.createElement('div');
     it.className = 'sector-item' + (activeFilter===s?' active':'');
     it.innerHTML = `<div class="sector-dot" style="background:${SECTORS[s].color}"></div>${SECTORS[s].icon} ${s}<span class="sector-count">${sectorCounts[s]||0}</span>`;
-    it.onclick = () => { activeFilter = (activeFilter===s?null:s); renderSectorList(); applyFilter(); };
+    it.onclick = () => {
+      activeFilter = (activeFilter===s?null:s);
+      renderSectorList();
+      applyFilter();
+      // 在「產業總覽」分頁時，捲到對應產業段落
+      if(!$("grid-view").classList.contains('hidden') && activeFilter){
+        scrollToSector(activeFilter);
+      }
+    };
     sectorList.appendChild(it);
   });
+  // 「全部產業」也綁定捲頂
+  all.onclick = () => {
+    activeFilter = null;
+    renderSectorList();
+    applyFilter();
+    if(!$("grid-view").classList.contains('hidden')){
+      $("grid-view").scrollTo({top:0, behavior:'smooth'});
+    }
+  };
+}
+
+/* 捲動到指定產業段落並閃爍高亮 */
+function scrollToSector(sectorName){
+  const block = document.querySelector(`[data-sector-block="${CSS.escape(sectorName)}"]`);
+  if(!block) return;
+  block.scrollIntoView({behavior:'smooth', block:'start'});
+  // 閃爍動畫
+  block.classList.remove('flash');
+  void block.offsetWidth; // 強制 reflow 重啟動畫
+  block.classList.add('flash');
 }
 
 /* 統計 */
@@ -641,6 +676,7 @@ function renderGrid(){
     const cs = COMPANIES.filter(c=>c.sector===s).sort((a,b)=>(a.rank||999)-(b.rank||999));
     const block = document.createElement('div');
     block.className = 'sector-block';
+    block.setAttribute('data-sector-block', s);
     block.innerHTML = `
       <h2><div class="sector-dot" style="background:${SECTORS[s].color}"></div>${SECTORS[s].icon} ${s}<span class="badge">${cs.length} 家</span></h2>
       <div class="company-grid">
@@ -667,6 +703,10 @@ document.querySelectorAll('.tabs .tab').forEach(t => {
     if(v==='graph'){
       if(!graphBuilt) buildGraph();
       else network?.redraw();
+    }
+    // 切到產業總覽且有篩選時自動捲到該產業
+    if(v==='grid' && activeFilter){
+      setTimeout(()=>scrollToSector(activeFilter), 50);
     }
   };
 });
