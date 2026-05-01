@@ -32,7 +32,7 @@
     border-bottom:1px solid var(--line);
     padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
   }
-  header h1{font-size:16px;font-weight:600;color:#fff;letter-spacing:.5px}
+  header h1{font-size:16px;font-weight:600;color:#fff;letter-spacing:.5px;white-space:nowrap}
   header h1 .sub{color:var(--muted);font-weight:400;font-size:13px;margin-left:8px}
   .search{flex:1;max-width:420px;position:relative}
   .search input{
@@ -177,7 +177,7 @@
 <body>
 <div id="app">
   <header>
-    <h1>台股全景儀表板<span class="sub">300 大台股 · 產業/集團/供應鏈關係網</span></h1>
+    <h1>台股全景儀表板<span class="sub">全部上市櫃 · 產業/集團/供應鏈關係網</span></h1>
     <div class="search"><input type="text" id="search" placeholder="搜尋股號或公司名稱（例：2330、台積電）"></div>
     <div class="stats">
       <span>公司 <b id="stat-company">--</b></span>
@@ -185,8 +185,8 @@
       <span>連結 <b id="stat-link">--</b></span>
     </div>
     <div class="tabs">
-      <button class="tab active" data-view="graph">關係網路圖</button>
-      <button class="tab" data-view="grid">產業總覽</button>
+      <button class="tab" data-view="graph">關係網路圖</button>
+      <button class="tab active" data-view="grid">產業總覽</button>
     </div>
   </header>
   <main>
@@ -201,21 +201,23 @@
         <div class="legend-item"><div class="edge-line" style="background:#34d399;border-top:1px dashed #34d399;background:transparent;height:0"></div>歷史相關性</div>
       </div>
     </aside>
-    <div class="view" id="graph-view">
+    <div class="view hidden" id="graph-view">
       <div class="graph-tools">
         <button class="toggle active" data-edge="supply">供應鏈</button>
         <button class="toggle active" data-edge="industry">同產業</button>
         <button class="toggle active" data-edge="group">集團</button>
         <button class="toggle" data-edge="correlation">相關性</button>
+        <button class="toggle active" id="connected-only" style="border-color:var(--good);color:var(--good)">僅顯示有連結</button>
         <button class="toggle" id="reset-zoom" style="border-color:var(--accent);color:var(--accent)">↺ 重置</button>
       </div>
       <div id="graph"></div>
       <div class="graph-info">
         <b>互動：</b>滾輪縮放 · 拖曳節點 · 點擊查看詳情<br>
-        <b>節點大小：</b>市值/重要性 · <b>顏色：</b>所屬產業
+        <b>節點大小：</b>市值/重要性 · <b>顏色：</b>所屬產業<br>
+        <b>提示：</b>取消「僅顯示有連結」會顯示全部 1,975 家，效能較慢
       </div>
     </div>
-    <div class="view hidden" id="grid-view"></div>
+    <div class="view" id="grid-view"></div>
   </main>
 </div>
 
@@ -310,6 +312,11 @@ COMPANIES.forEach(c => sectorCounts[c.sector] = (sectorCounts[c.sector]||0)+1);
 
 let activeFilter = null; // 產業篩選
 const edgeFilter = { supply:true, industry:true, group:true, correlation:false };
+let connectedOnly = true; // 預設網路圖只顯示有連結的公司
+
+// 預先計算「有連結的 codes」
+const connectedCodes = new Set();
+LINKS.forEach(e => { connectedCodes.add(e[0]); connectedCodes.add(e[1]); });
 
 /* 側邊欄產業列表 */
 function renderSectorList(){
@@ -342,8 +349,13 @@ function updateStats(){
    網路圖（vis-network）
    ============================================================ */
 let network = null;
+let graphBuilt = false;
 function buildGraph(){
-  const nodes = COMPANIES.map(c => {
+  if(graphBuilt) return;
+  graphBuilt = true;
+  // 只渲染有連結的公司（效能考量；可透過 toggle 顯示全部）
+  const sourceCompanies = connectedOnly ? COMPANIES.filter(c => connectedCodes.has(c.code)) : COMPANIES;
+  const nodes = sourceCompanies.map(c => {
     const sc = SECTORS[c.sector] || SECTORS["其他"];
     const size = c.rank ? Math.max(8, 32 - Math.log2(c.rank)*3) : 12;
     return {
@@ -395,13 +407,14 @@ function buildGraph(){
 function applyFilter(){
   if(!network) return;
   const visibleCodes = new Set(
-    COMPANIES.filter(c => !activeFilter || c.sector===activeFilter).map(c=>c.code)
+    COMPANIES.filter(c => {
+      if(activeFilter && c.sector !== activeFilter) return false;
+      if(connectedOnly && !connectedCodes.has(c.code)) return false;
+      return true;
+    }).map(c=>c.code)
   );
-  // toggle node visibility via update
   const allNodes = network.body.data.nodes.get();
-  allNodes.forEach(n => {
-    n.hidden = !visibleCodes.has(n.id);
-  });
+  allNodes.forEach(n => { n.hidden = !visibleCodes.has(n.id); });
   network.body.data.nodes.update(allNodes);
 
   const allEdges = network.body.data.edges.get();
@@ -409,6 +422,14 @@ function applyFilter(){
     ed.hidden = !visibleCodes.has(ed.from) || !visibleCodes.has(ed.to) || !edgeFilter[ed.type];
   });
   network.body.data.edges.update(allEdges);
+}
+
+/* connected-only toggle */
+function rebuildGraph(){
+  graphBuilt = false;
+  if(network){ network.destroy(); network = null; }
+  $("graph").innerHTML = '';
+  buildGraph();
 }
 
 /* edge filter buttons */
@@ -420,6 +441,18 @@ document.querySelectorAll('.graph-tools .toggle[data-edge]').forEach(btn => {
     applyFilter();
   };
 });
+$("connected-only").onclick = () => {
+  connectedOnly = !connectedOnly;
+  $("connected-only").classList.toggle('active', connectedOnly);
+  if(!connectedOnly){
+    if(!confirm('顯示全部 1,975 家公司會讓網路圖效能變慢，可能需要 5-10 秒運算。確定？')){
+      connectedOnly = true;
+      $("connected-only").classList.toggle('active', connectedOnly);
+      return;
+    }
+  }
+  rebuildGraph();
+};
 $("reset-zoom").onclick = () => { if(network) network.fit({ animation:{ duration:500, easingFunction:'easeInOutQuad'}}); };
 
 /* ============================================================
@@ -537,7 +570,11 @@ document.querySelectorAll('.tabs .tab').forEach(t => {
     const v = t.dataset.view;
     $("graph-view").classList.toggle('hidden', v!=='graph');
     $("grid-view").classList.toggle('hidden', v!=='grid');
-    if(v==='graph' && network) network.redraw();
+    // lazy build graph on first switch
+    if(v==='graph'){
+      if(!graphBuilt) buildGraph();
+      else network?.redraw();
+    }
   };
 });
 
@@ -567,7 +604,7 @@ window.addEventListener('DOMContentLoaded', () => {
   renderSectorList();
   updateStats();
   renderGrid();
-  buildGraph();
+  // 不在初始化時 buildGraph — 等使用者切到「關係網路圖」分頁才建立
 });
 </script>
 </body>
