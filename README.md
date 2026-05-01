@@ -21,6 +21,19 @@
 https://<你的 GitHub 帳號>.github.io/taiwan-stock-dashboard/
 ```
 
+## 📱 安裝為 iPhone / iPad App
+
+本專案是 **PWA（漸進式網頁應用）**，可在 iOS 上安裝為原生風格 App：
+
+1. 用 **Safari** 開啟線上版本
+2. 點下方分享按鈕（□↑）
+3. 滑動找到「**加入主畫面**」
+4. 確認名稱「台股全景」→ 加入
+
+完成後主畫面會出現 App icon，點擊以全螢幕開啟，無瀏覽器列、可離線使用。
+
+Android 同理（Chrome 會跳「安裝應用程式」提示）。
+
 ## 🛠️ 本地使用
 
 直接雙擊 `index.html` 即可在瀏覽器開啟，無需任何安裝或建置。

@@ -16,3 +16,8 @@
 # Temp
 *.tmp
 *.bak
+
+# Raw API dumps
+tpex_raw.json
+twse_raw.json
+*_raw.json

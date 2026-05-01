@@ -2,8 +2,24 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>台股全景儀表板 | Roger 投資包</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>台股全景儀表板</title>
+<meta name="description" content="全部上市櫃 1,975 家公司 × 36 個產業的關係網路圖">
+<meta name="theme-color" content="#0f1729">
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+
+<!-- iOS Add to Home Screen -->
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="台股全景">
+<meta name="format-detection" content="telephone=no">
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.6/standalone/umd/vis-network.min.js"></script>
 <style>
   :root{
@@ -172,11 +188,68 @@
     background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);
     padding:10px 14px;margin:10px 16px 0;border-radius:8px;font-size:12px;color:var(--warn);
   }
+
+  /* ============ 手機版（≤768px）響應式 ============ */
+  .mobile-menu-btn{display:none}
+  .sidebar-backdrop{display:none}
+  @media (max-width:768px){
+    /* Header 簡化 */
+    header{padding:8px 12px;gap:8px}
+    header h1{font-size:14px;flex:1;min-width:0}
+    header h1 .sub{display:none}
+    .stats{display:none}
+    .search{order:3;flex:1 1 100%;max-width:none}
+    .tabs{order:4}
+    .tab{padding:5px 10px;font-size:12px}
+    .mobile-menu-btn{
+      display:flex;align-items:center;justify-content:center;
+      width:34px;height:34px;border:1px solid var(--line);border-radius:6px;
+      background:var(--bg2);color:var(--text);cursor:pointer;font-size:18px;
+    }
+
+    /* 主版面：側欄變抽屜 */
+    main{grid-template-columns:1fr}
+    aside{
+      position:fixed;left:0;top:0;bottom:0;width:240px;z-index:100;
+      transform:translateX(-100%);transition:transform .25s ease;
+      box-shadow:8px 0 20px rgba(0,0,0,.5);
+    }
+    aside.open{transform:translateX(0)}
+    .sidebar-backdrop.show{
+      display:block;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99;
+    }
+
+    /* Detail 變全螢幕 */
+    #detail{width:100%;max-width:100%}
+
+    /* Grid view 在手機上密一點 */
+    #grid-view{padding:10px}
+    .sector-block{padding:10px;margin-bottom:10px}
+    .company-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:5px}
+    .company-card{padding:5px 8px}
+    .company-card .name{font-size:12px}
+
+    /* Graph tools 換行緊湊 */
+    .graph-tools{max-width:calc(100% - 24px);padding:6px;gap:4px}
+    .graph-tools .toggle{padding:3px 7px;font-size:10px}
+    .graph-info{font-size:10px;padding:8px;max-width:calc(100% - 24px);bottom:8px;left:8px;right:8px}
+
+    /* Tab 縮短 */
+    .tab[data-view="graph"]::after{content:"";}
+    .tab[data-view="grid"]::after{content:"";}
+  }
+
+  /* iPhone 安全區域（瀏海/動態島）支援 */
+  @supports(padding:max(0px)){
+    header{padding-top:max(8px,env(safe-area-inset-top))}
+    #detail{padding-top:env(safe-area-inset-top)}
+  }
 </style>
 </head>
 <body>
 <div id="app">
   <header>
+    <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="選單">☰</button>
     <h1>台股全景儀表板<span class="sub">全部上市櫃 · 產業/集團/供應鏈關係網</span></h1>
     <div class="search"><input type="text" id="search" placeholder="搜尋股號或公司名稱（例：2330、台積電）"></div>
     <div class="stats">
@@ -219,6 +292,7 @@
     </div>
     <div class="view" id="grid-view"></div>
   </main>
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 </div>
 
 <aside id="detail">
@@ -537,6 +611,25 @@ function openDetail(code){
 }
 $("detail-close").onclick = () => $("detail").classList.remove('open');
 
+/* 手機選單抽屜 */
+const sidebarEl = document.querySelector('aside');
+const backdrop = $("sidebar-backdrop");
+$("mobile-menu-btn").onclick = () => {
+  sidebarEl.classList.add('open');
+  backdrop.classList.add('show');
+};
+backdrop.onclick = () => {
+  sidebarEl.classList.remove('open');
+  backdrop.classList.remove('show');
+};
+// 點側欄項目後自動關閉
+sidebarEl.addEventListener('click', e => {
+  if(e.target.closest('.sector-item') && window.innerWidth <= 768){
+    sidebarEl.classList.remove('open');
+    backdrop.classList.remove('show');
+  }
+});
+
 /* ============================================================
    產業總覽 grid
    ============================================================ */
@@ -594,6 +687,13 @@ $("search").addEventListener('input', e => {
     network.body.data.edges.update(allEdges);
   }
 });
+
+/* PWA Service Worker 註冊 */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  });
+}
 
 /* init */
 window.addEventListener('DOMContentLoaded', () => {
